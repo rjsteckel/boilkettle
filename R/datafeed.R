@@ -5,17 +5,29 @@
 #' @import dplyr
 #' @import timetk
 #'
-ib_historical <- function(context, symbol, barSize='15 mins', duration='1 W') {
+ib_historical <- function(context, symbols, barSize='15 mins', duration='1 W') {
   if(!is_valid_barsize(barSize)) {
     stop('Invalid barsize')
   }
 
-  data <- reqHistoricalData(context$get_connection(), twsSTK(symbol), barSize=barSize, duration=duration)
-  tt <- tk_tbl(data, timetk_idx=TRUE)
-  colnames(tt) <- c('datetime', 'open', 'high', 'low', 'close', 'volume', 'adjusted', 'has_gaps', 'count')
-  tt <- tt %>% arrange(datetime)
+  symbol_data <- lapply(symbols, function(symbol) {
+    tryCatch({
+      data <- reqHistoricalData(context$get_connection(), twsSTK(symbol), barSize=barSize, duration=duration)
+      tt <- tk_tbl(data, timetk_idx=TRUE)
+      colnames(tt) <- c('datetime', 'open', 'high', 'low', 'close', 'volume', 'adjusted', 'has_gaps', 'count')
+      tt$symbol <- symbol
+      tt <- tt %>% arrange(datetime)
+      tt
+    }, warning=function(w) {
+      print(w)
+      NA
+    }, error=function(e) {
+      print(e)
+      NA
+    })
+  })
 
-  return(tt)
+  return(bind_rows(symbol_data[sapply(symbol_data, tibble::is.tibble)]))
 }
 
 #'
