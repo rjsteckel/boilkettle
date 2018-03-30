@@ -1,34 +1,3 @@
-debug <- function(msg) {
-  print(msg)
-}
-
-
-#'
-#' @export
-#'
-create_context <- function(twsport=4002) {
-  if(exists('context', mode="environment")) {
-    stop('**context already exists')
-  }
-
-  context <- new.env()
-  context$twsport <- twsport
-  context$twsconn <- NULL
-  context$get_connection <- function() {
-    if(is.null(context$twsconn)) {
-      debug('NULL connection. Opening new TWS connection')
-      context$twsconn <- twsConnect(port=context$twsport)
-    }
-    if(!isConnected(context$twsconn)) {
-      debug('Disconnected. Opening new TWS connection')
-      context$twsconn <- twsConnect(port=context$twsport)
-    }
-    return(context$twsconn)
-  }
-
-  return(context)
-}
-
 
 #'
 #' @export
@@ -52,12 +21,17 @@ bar_size_to_secs <- function(bar_size) {
 }
 
 
-ib_send_order <- function(context, symbol, quantity, limit_price=0,
-                       action_type=c('BUY','SELL','SSHORT'),
-                       order_type=c('MKT','MKTCLS','LMT','LMTCLS','STP','STPLMT','REL'),
-                       time_in_force=c('DAY','GTC','IOC','GTD'),
-                       aux_price=0,
-                       transmit=TRUE) {
+#'
+#' @export
+#'
+ib_send_order <- function(context, symbol, quantity,
+                          action_type=c('BUY','SELL','SSHORT'),
+                          order_type=c('MKT','MKTCLS','LMT','LMTCLS','STP','STPLMT','REL'),
+                          limit_price=0,
+                          aux_price=0,
+                          parent_id=0,
+                          time_in_force=c('DAY','GTC','IOC','GTD'),
+                          transmit=TRUE) {
 
   action <- match.arg(action_type)
   order <- match.arg(order_type)
@@ -72,15 +46,19 @@ ib_send_order <- function(context, symbol, quantity, limit_price=0,
   }
 
   id = as.numeric(reqIds(context$get_connection()))
-  tws_order <- twsOrder(id, orderType=order,
-                 lmtPrice=limit_price,
-                 auxPrice=aux_price,
-                 action=action,
-                 totalQuantity=quantity,
-                 tif=time_in_force,
-                 transmit=transmit)
+  tws_order <- twsOrder(id,
+                        action=action,
+                        totalQuantity=quantity,
+                        orderType=order,
+                        lmtPrice=round(limit_price,2),
+                        auxPrice=round(aux_price, 2),
+                        parentId=parent_id,
+                        tif=time_in_force,
+                        transmit=transmit)
 
+  #What about besides STK types?
   order_id <- placeOrder(context$get_connection(), twsSTK(symbol), tws_order)
+  #twsDisconnect(context$get_connection())
   return(order_id)
 }
 
@@ -88,30 +66,61 @@ ib_send_order <- function(context, symbol, quantity, limit_price=0,
 #'
 #' @export
 #'
-ib_buy_order <- function(context, symbol, quantity, order_type, time_in_force='GTC', limit_price=0) {
-  ib_send_order(context, symbol, quantity, limit_price, 'BUY', order_type, time_in_force)
+ib_buy_market_order <- function(context, symbol, quantity, order_type, time_in_force='GTC') {
+  ib_send_order(context, symbol, quantity, 'BUY', 'MKT', time_in_force=time_in_force)
 }
 
 #'
 #' @export
 #'
-ib_sell_order <- function(context, symbol, quantity, order_type, time_in_force='GTC', limit_price=0) {
-  ib_send_order(context, symbol, quantity, limit_price, 'SELL', order_type, time_in_force)
+ib_buy_limit_order <- function(context, symbol, quantity, order_type, limit_price=0, time_in_force='GTC') {
+  ib_send_order(context, symbol, quantity, 'BUY', 'LMT', limit_price=limit_price, time_in_force=time_in_force)
 }
 
 #'
 #' @export
 #'
-ib_stop_order <- function(context, parent_order_id, quantity, order_type=c('STP','STPLMT'), time_in_force='GTC', stop_price=0, limit_price=0) {
-  order <- match.arg(order_type)
-  if(order=='STP') {
-    stopifnot(stop_price > 0)
-  }
-  if(order=='STPLMT') {
-    stopifnot(limit_price > 0)
-  }
+ib_sell_market_order <- function(context, symbol, quantity, order_type, time_in_force='GTC') {
+  ib_send_order(context, symbol, quantity, 'SELL', 'MKT', time_in_force=time_in_force)
+}
 
-  ib_send_order(context, symbol, quantity, limit_price, 'SELL', order, time_in_force, aux_price=stop_price)
+#'
+#' @export
+#'
+ib_sell_limit_order <- function(context, symbol, quantity, order_type, limit_price=0, time_in_force='GTC') {
+  ib_send_order(context, symbol, quantity, 'SELL', 'LMT', limit_price=limit_price, time_in_force=time_in_force)
+}
+
+#'
+#' @export
+#'
+ib_stop_market_order <- function(context, symbol, quantity, time_in_force='GTC', parent_order_id=0, stop_price=0) {
+  stopifnot(parent_order_id!=0)
+  ib_send_order(context, symbol, quantity, 'SELL', order_type='STP', limit_price=limit_price,
+                time_in_force=time_in_force, parent_id=parent_order_id, aux_price=stop_price)
+}
+
+
+#'
+#' @export
+#'
+ib_stop_limit_order <- function(context, symbol, quantity, limit_price=0, time_in_force='GTC', parent_order_id=0, stop_price=0) {
+  stopifnot(parent_order_id!=0)
+  ib_send_order(context, symbol, quantity, 'SELL', order_type='STPLMT', limit_price=limit_price,
+                time_in_force=time_in_force, parent_id=parent_order_id, aux_price=stop_price)
+}
+
+
+#'
+#' @export
+#'
+ib_stop_adjustable_order <- function(context, symbol, quantity, limit_price=0, time_in_force='GTC', parent_order_id=0, stop_price=0) {
+  stopifnot(parent_order_id!=0)
+  #Set stop
+  ib_send_order(context, symbol, quantity, 'SELL', order_type='STP', time_in_force=time_in_force, parent_id=parent_order_id, aux_price=stop_price)
+  #add adjustment
+  ib_send_order(context, symbol, quantity, 'SELL', order_type='TRAIL', limit_price=limit_price,
+                time_in_force=time_in_force, parent_id=parent_order_id, aux_price=stop_price)
 }
 
 #'
@@ -119,6 +128,7 @@ ib_stop_order <- function(context, parent_order_id, quantity, order_type=c('STP'
 #'
 ib_cancel_order <- function(context, order_id) {
   cancelOrder(context$get_connection(), order_id)
+  #twsDisconnect(context$get_connection())
 }
 
 
@@ -135,6 +145,7 @@ ib_sell_short_order <- function(context, symbol, quantity, time_in_force, order,
 #'
 ib_account_details <- function(context) {
   reqAccountUpdates(context$get_connection())
+  #twsDisconnect(context$get_connection())
 }
 
 
@@ -194,60 +205,3 @@ snapShot <- function (twsCon, eWrapper, timestamp, file, playback = 1, ...) {
 }
 
 
-
-
-
-#'
-#' @export
-#'
-#'
-handle_exits <- function(symbols, exit_strategy, bar_size='5 mins', look_back='1 W', verbose=TRUE) {
-  if(!is_valid_barsize(bar_size)) {
-    stop(paste('Invalid bar size:', bar_size))
-  }
-
-  if(!exists(as.character(substitute(exit_strategy)), mode='function')) {
-    stop('Exit method does not exist')
-  }
-
-  positions_series <- list()
-  for(symbol in symbols) {
-    print(paste('Loading history for', symbol))
-    series <- ib_historical(context, symbol, barSize=bar_size, duration=look_back)
-    positions_series[[symbol]] <- series %>%
-      select(datetime, open, high, low, close, volume, adjusted, count)
-  }
-
-  while(TRUE) {
-    for(symbol in symbols) {
-      tryCatch({
-        #TODO: update with market data?
-        series <- ib_historical(context, symbol, barSize=bar_size, duration='1 D')
-        N <- nrow(series)
-        last_bar <- series[N,]
-        positions_series[[symbol]] <- if(last_bar$datetime > last(positions_series[[symbol]]$datetime)) {
-          bind_rows(positions_series[[symbol]], last_bar)
-        } else {
-          if(verbose) {
-            print(paste(symbol, 'No new data'))
-          }
-          positions_series[[symbol]]
-        }
-
-        position <- exit_strategy(positions_series[[symbol]])
-        if(position==0) {
-          print('exit')
-        }
-
-      }, error=function(e) {
-        print(e)
-      }, warning=function(w) {
-        print(w)
-      })
-    }
-
-    secs <- bar_size_to_secs(bar_size)
-    print(paste('Sleeping for', secs))
-    Sys.sleep(secs)
-  }
-}

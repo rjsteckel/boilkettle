@@ -133,7 +133,7 @@ ib_open_orders <- function(context) {
 #'
 #' @export
 #'
-ib_position_stops <- function(context, position) {
+ib_position_orders <- function(context, symbol) {
   oo <- ib_open_orders(context)
   stopifnot(length(oo) > 0)
 
@@ -141,11 +141,16 @@ ib_position_stops <- function(context, position) {
   for(i in 1:length(oo)) {
     contract <- oo[[i]]$contract
     order <- oo[[i]]$order
-    if(contract$symbol==symbol & order$orderType=='STP' & order$parentId==position$order_id) {
+    if(contract$symbol==symbol) {
       pos_stops[[length(pos_stops)+1]] <- order
     }
   }
-  return(pos_stops)
+
+  ll <- lapply(pos_stops, function(o) as.tibble(list(order_id=o$orderId, action=o$action,
+                                                     quantity=o$totalQuantity, order_type=o$orderType,
+                                                     limit_price=o$lmtPrice, stop_price=o$auxPrice, time_in_force=o$tif)))
+  orders <- bind_rows(ll)
+  return(orders)
 }
 
 
