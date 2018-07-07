@@ -5,7 +5,7 @@
 #' @import dplyr
 #' @import timetk
 #'
-ib_historical <- function(context, symbols, barSize='15 mins', duration='1 W') {
+ib_historical <- function(context, symbols, barSize='1 hour', duration='1 W') {
   if(!is_valid_barsize(barSize)) {
     stop('Invalid barsize')
   }
@@ -26,9 +26,46 @@ ib_historical <- function(context, symbols, barSize='15 mins', duration='1 W') {
       NA
     })
   })
-
-  return(bind_rows(symbol_data[sapply(symbol_data, tibble::is.tibble)]))
+  X <- bind_rows(symbol_data[sapply(symbol_data, tibble::is.tibble)])
+  X <- X %>% mutate(symbol=as.factor(symbol))
+  return(X)
 }
+
+
+#'
+#' @export
+#'
+#' @import dplyr
+#' @import timetk
+#'
+ib_historical_futures <- function(context, contracts, barSize='1 hour', duration='1 W') {
+  if(!is_valid_barsize(barSize)) {
+    stop('Invalid barsize')
+  }
+
+  symbol_data <- lapply(contracts, function(contract) {
+    tryCatch({
+      future <- twsFuture(contract[1], contract[2], contract[3])
+      data <- reqHistoricalData(context$get_connection(), future, barSize=barSize, duration=duration)
+      tt <- tk_tbl(data, timetk_idx=TRUE)
+      colnames(tt) <- c('datetime', 'open', 'high', 'low', 'close', 'volume', 'wap', 'has_gaps', 'count')
+      tt$symbol <- contract[1]
+      tt %>% arrange(datetime)
+    }, warning=function(w) {
+      print(w)
+      NA
+    }, error=function(e) {
+      print(e)
+      NA
+    })
+  })
+
+  X <- bind_rows(symbol_data[sapply(symbol_data, tibble::is.tibble)])
+  X <- X %>% mutate(symbol=as.factor(symbol))
+  return(X)
+}
+
+
 
 #'
 #' @export

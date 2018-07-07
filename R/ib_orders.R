@@ -1,4 +1,13 @@
 
+#'
+#' @export
+#'
+ib_positions <- function(context) {
+  au <- reqAccountUpdates(context$get_connection())
+  pv <- twsPortfolioValue(au)
+  as_tibble(pv)
+}
+
 
 #'
 #' @export
@@ -33,10 +42,9 @@ ib_list_open_orders <- function(context) {
 #'
 #' @export
 #'
-ib_contract_details <- function(context, symbol) {
+ib_equity_contract_details <- function(context, symbol) {
   reqContractDetails(context$get_connection(), twsSTK(symbol))
 }
-
 
 
 #'

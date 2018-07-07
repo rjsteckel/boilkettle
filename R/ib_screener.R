@@ -3,8 +3,9 @@
 #'
 #' @export
 #'
-ib_screener <- function(context) {
-  scan_code <- 'TOP_PERC_GAIN'  #HIGH_OPT_VOLUME_PUT_CALL_RATIO, TOP_PERC_GAIN, HOT_BY_VOLUME, MOST_ACTIVE, HIGH_OPT_VOLUME_PUT_CALL_RATIO
+ib_screener_top_pct_lose <- function(context) {
+  #HIGH_OPT_VOLUME_PUT_CALL_RATIO, TOP_PERC_GAIN, HOT_BY_VOLUME, MOST_ACTIVE, HIGH_OPT_VOLUME_PUT_CALL_RATIO
+  scan_code <- 'TOP_PERC_LOSE'
   scanner <- twsScannerSubscription(numberOfRows=100,
                                     instrument="STK",
                                     locationCode="STK.US.MAJOR",
